@@ -1,0 +1,1258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Van GPS Tracker</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    
+    <style>
+        body { 
+            margin: 0; 
+            padding: 10px; 
+            font-family: Arial, sans-serif; 
+        }
+        #map { 
+            height: 70vh; 
+            width: 100%; 
+            border-radius: 8px;
+        }
+        .controls {
+            margin-bottom: 15px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        button {
+            padding: 8px 16px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+        }
+        input, select {
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+        }
+        .status {
+            color: #666;
+            margin-top: 10px;
+        }
+        .spinner {
+            display: none;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .input-group {
+            display: flex;
+            flex-direction: column;
+        }
+        .server-url {
+            width: 300px;
+        }
+        .token-input {
+            width: 350px;
+            font-family: monospace;
+        }
+        .auth-toggle {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .auth-toggle label {
+            margin-right: 15px;
+            cursor: pointer;
+        }
+        .auth-toggle input {
+            cursor: pointer;
+        }
+        .auth-section {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .debug-box {
+            margin-top: 10px;
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            display: none;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .users-container, .tracks-container {
+            margin-top: 15px;
+        }
+        .users-table, .tracks-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        .users-table th, .users-table td, .tracks-table th, .tracks-table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        .users-table th, .tracks-table th {
+            background-color: #f2f2f2;
+            position: sticky;
+            top: 0;
+        }
+        .users-table tr:hover, .tracks-table tr:hover {
+            background-color: #f5f5f5;
+            cursor: pointer;
+        }
+        .tab-container {
+            margin-top: 15px;
+        }
+        .tab-buttons {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 10px;
+        }
+        .tab-button {
+            padding: 8px 16px;
+            background: #f0f0f0;
+            border: 1px solid #ccc;
+            border-bottom: none;
+            border-radius: 4px 4px 0 0;
+            cursor: pointer;
+        }
+        .tab-button.active {
+            background: #fff;
+            border-bottom: 1px solid white;
+            position: relative;
+            z-index: 1;
+        }
+        .tab-content {
+            display: none;
+            border: 1px solid #ccc;
+            padding: 15px;
+            border-radius: 0 4px 4px 4px;
+            margin-top: -1px;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .view-btn {
+            padding: 4px 8px;
+            font-size: 12px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .view-btn:hover {
+            background: #45a049;
+        }
+        .trip-stats {
+            font-size: 12px;
+            color: #666;
+            margin-top: 3px;
+        }
+        .center-text {
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <h1>Van GPS Tracker</h1>
+    
+    <div class="controls">
+        <div class="input-group">
+            <label for="server-url">Server URL:</label>
+            <input type="url" id="server-url" class="server-url" placeholder="https://your-server-address/comGpsGate" value="https://gpsgate.winticloud.ch/comGpsGate">
+        </div>
+    </div>
+    
+    <div class="auth-toggle">
+        <label>
+            <input type="radio" name="auth-method" id="auth-credentials"> Use Credentials
+        </label>
+        <label>
+            <input type="radio" name="auth-method" id="auth-token" checked> Use API Token
+        </label>
+    </div>
+    
+    <div id="credentials-section" class="auth-section" style="display: none;">
+        <div class="input-group">
+            <label for="username">Username:</label>
+            <input type="text" id="username" placeholder="GpsGate username">
+        </div>
+        <div class="input-group">
+            <label for="password">Password:</label>
+            <input type="password" id="password" placeholder="GpsGate password">
+        </div>
+        <div class="input-group">
+            <label for="application">Application:</label>
+            <input type="text" id="application" value="VanTrackerApp">
+        </div>
+    </div>
+    
+    <div id="token-section" class="auth-section">
+        <div class="input-group">
+            <label for="api-token">API Token (include v2: prefix):</label>
+            <input type="text" id="api-token" class="token-input" placeholder="v2:IMDpjOWM4ZDc3N2WQ2YjI5Z0NQMDAwMDAwMDAyNGVm==" value="">
+        </div>
+        <div class="input-group">
+            <label for="application-id">Application ID:</label>
+            <input type="text" id="application-id" placeholder="Enter application ID" value="4">
+        </div>
+    </div>
+    
+    <div>
+        <button id="login-btn">Set Token</button>
+        <button id="load-users-btn" disabled>Load Users</button>
+        <button id="load-all-tracks-btn" disabled>Load All Tracks</button>
+        <button id="toggle-debug-btn">Show Debug</button>
+        <div id="spinner" class="spinner"></div>
+    </div>
+    
+    <div id="status" class="status">Please set your API token first</div>
+    <div id="debug-box" class="debug-box"></div>
+    
+    <div class="tab-container">
+        <div class="tab-buttons">
+            <div id="tab-track" class="tab-button active">Track Data</div>
+            <div id="tab-tracks" class="tab-button">All Tracks</div>
+            <div id="tab-users" class="tab-button">Users</div>
+        </div>
+        
+        <div id="track-content" class="tab-content active">
+            <div class="controls">
+                <div class="input-group">
+                    <label for="trackinfo-id">TrackInfo ID:</label>
+                    <input type="text" id="trackinfo-id" placeholder="Enter trackinfo ID" value="1">
+                </div>
+                <div class="input-group">
+                    <label for="start-time">Start Time:</label>
+                    <input type="datetime-local" id="start-time">
+                </div>
+                <div class="input-group">
+                    <label for="end-time">End Time:</label>
+                    <input type="datetime-local" id="end-time">
+                </div>
+                <div>
+                    <button id="load-track-btn" disabled>Load Track</button>
+                </div>
+            </div>
+            <div id="track-stats" class="status"></div>
+            <div id="map"></div>
+        </div>
+        
+        <div id="tracks-content" class="tab-content">
+            <div class="controls">
+                <div class="input-group">
+                    <label for="updated-since">Updated Since:</label>
+                    <input type="datetime-local" id="updated-since">
+                </div>
+                <div>
+                    <button id="refresh-tracks-btn">Refresh Tracks</button>
+                </div>
+            </div>
+            <div class="tracks-container" id="tracks-container">
+                <h2>All Track Infos</h2>
+                <table class="tracks-table" id="tracks-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Date Recorded</th>
+                            <th>Trip Details</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tracks-tbody">
+                        <!-- Track data will be inserted here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <div id="users-content" class="tab-content">
+            <div class="users-container" id="users-container">
+                <h2>GpsGate Users</h2>
+                <table class="users-table" id="users-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Name</th>
+                            <th>Username</th>
+                            <th>Email</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="users-tbody">
+                        <!-- User data will be inserted here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <script>
+        // Initialize variables
+        let authToken = '';
+        let applicationId = '';
+        let trackInfoId = '';
+        let trackData = {}; // Store track data for reference
+        
+        // Elements
+        const serverUrlInput = document.getElementById('server-url');
+        const loginBtn = document.getElementById('login-btn');
+        const loadTrackBtn = document.getElementById('load-track-btn');
+        const loadUsersBtn = document.getElementById('load-users-btn');
+        const loadAllTracksBtn = document.getElementById('load-all-tracks-btn');
+        const refreshTracksBtn = document.getElementById('refresh-tracks-btn');
+        const usernameInput = document.getElementById('username');
+        const passwordInput = document.getElementById('password');
+        const applicationInput = document.getElementById('application');
+        const startTimeInput = document.getElementById('start-time');
+        const endTimeInput = document.getElementById('end-time');
+        const updatedSinceInput = document.getElementById('updated-since');
+        const statusDiv = document.getElementById('status');
+        const trackStatsDiv = document.getElementById('track-stats');
+        const spinner = document.getElementById('spinner');
+        const debugBox = document.getElementById('debug-box');
+        const toggleDebugBtn = document.getElementById('toggle-debug-btn');
+        const usersContainer = document.getElementById('users-container');
+        const usersTable = document.getElementById('users-table');
+        const usersTbody = document.getElementById('users-tbody');
+        const tracksContainer = document.getElementById('tracks-container');
+        const tracksTable = document.getElementById('tracks-table');
+        const tracksTbody = document.getElementById('tracks-tbody');
+        
+        // Tabs
+        const tabTrack = document.getElementById('tab-track');
+        const tabTracks = document.getElementById('tab-tracks');
+        const tabUsers = document.getElementById('tab-users');
+        const trackContent = document.getElementById('track-content');
+        const tracksContent = document.getElementById('tracks-content');
+        const usersContent = document.getElementById('users-content');
+        
+        // Token elements
+        const authCredentialsRadio = document.getElementById('auth-credentials');
+        const authTokenRadio = document.getElementById('auth-token');
+        const credentialsSection = document.getElementById('credentials-section');
+        const tokenSection = document.getElementById('token-section');
+        const apiTokenInput = document.getElementById('api-token');
+        const applicationIdInput = document.getElementById('application-id');
+        const trackInfoIdInput = document.getElementById('trackinfo-id');
+        
+        // Set default date/time values
+        const now = new Date();
+        const yesterday = new Date(now);
+        yesterday.setDate(yesterday.getDate() - 1);
+        startTimeInput.value = formatDateForInput(yesterday);
+        endTimeInput.value = formatDateForInput(now);
+        
+        // Set default for updated since (2 months ago)
+        const twoMonthsAgo = new Date(now);
+        twoMonthsAgo.setMonth(now.getMonth() - 2);
+        updatedSinceInput.value = formatDateForInput(twoMonthsAgo);
+        
+        // Initialize map
+        const map = L.map('map').setView([47.4968, 8.7378], 13); // Center based on your sample data
+        
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+        
+        // Tab handling
+        tabTrack.addEventListener('click', function() {
+            tabTrack.classList.add('active');
+            tabTracks.classList.remove('active');
+            tabUsers.classList.remove('active');
+            trackContent.classList.add('active');
+            tracksContent.classList.remove('active');
+            usersContent.classList.remove('active');
+        });
+        
+        tabTracks.addEventListener('click', function() {
+            tabTracks.classList.add('active');
+            tabTrack.classList.remove('active');
+            tabUsers.classList.remove('active');
+            tracksContent.classList.add('active');
+            trackContent.classList.remove('active');
+            usersContent.classList.remove('active');
+        });
+        
+        tabUsers.addEventListener('click', function() {
+            tabUsers.classList.add('active');
+            tabTrack.classList.remove('active');
+            tabTracks.classList.remove('active');
+            usersContent.classList.add('active');
+            trackContent.classList.remove('active');
+            tracksContent.classList.remove('active');
+        });
+        
+        // Toggle between authentication methods
+        authCredentialsRadio.addEventListener('change', function() {
+            if (this.checked) {
+                credentialsSection.style.display = 'flex';
+                tokenSection.style.display = 'none';
+                loginBtn.textContent = 'Login';
+            }
+        });
+        
+        authTokenRadio.addEventListener('change', function() {
+            if (this.checked) {
+                credentialsSection.style.display = 'none';
+                tokenSection.style.display = 'flex';
+                loginBtn.textContent = 'Set Token';
+            }
+        });
+        
+        toggleDebugBtn.addEventListener('click', function() {
+            if (debugBox.style.display === 'none' || !debugBox.style.display) {
+                debugBox.style.display = 'block';
+                this.textContent = 'Hide Debug';
+            } else {
+                debugBox.style.display = 'none';
+                this.textContent = 'Show Debug';
+            }
+        });
+        
+        function formatDateForInput(date) {
+            return date.toISOString().slice(0, 16);
+        }
+        
+        // Format date for display
+        function formatDateForDisplay(dateStr) {
+            if (!dateStr) return "No date available";
+            
+            try {
+                const date = new Date(dateStr);
+                if (isNaN(date.getTime())) {
+                    return "Invalid date format";
+                }
+                return date.toLocaleString();
+            } catch (e) {
+                return "Invalid date";
+            }
+        }
+        
+        // Calculate distance between two points
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371; // Radius of the earth in km
+            const dLat = deg2rad(lat2 - lat1);
+            const dLon = deg2rad(lon2 - lon1);
+            const a = 
+                Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
+                Math.sin(dLon/2) * Math.sin(dLon/2); 
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+            const d = R * c; // Distance in km
+            return d;
+        }
+        
+        function deg2rad(deg) {
+            return deg * (Math.PI/180);
+        }
+        
+        // Format duration from milliseconds to human-readable format
+        function formatDuration(milliseconds) {
+            if (!milliseconds || isNaN(milliseconds)) return "Unknown duration";
+            
+            const seconds = Math.floor(milliseconds / 1000);
+            const minutes = Math.floor(seconds / 60);
+            const hours = Math.floor(minutes / 60);
+            const remainingMinutes = minutes % 60;
+            
+            if (hours === 0 && remainingMinutes === 0) {
+                return "Less than a minute";
+            }
+            
+            let result = "";
+            if (hours > 0) {
+                result += `${hours} hour${hours > 1 ? 's' : ''}`;
+            }
+            if (remainingMinutes > 0) {
+                if (result.length > 0) result += " ";
+                result += `${remainingMinutes} minute${remainingMinutes > 1 ? 's' : ''}`;
+            }
+            
+            return result;
+        }
+        
+        // Format distance in kilometers
+        function formatDistance(kilometers) {
+            if (!kilometers || isNaN(kilometers)) return "Unknown distance";
+            
+            if (kilometers < 1) {
+                // Convert to meters if less than 1 km
+                const meters = Math.round(kilometers * 1000);
+                return `${meters} meters`;
+            } else {
+                // Round to 1 decimal place
+                return `${kilometers.toFixed(1)} km`;
+            }
+        }
+        
+        // Function to validate URL
+        function isValidUrl(url) {
+            try {
+                new URL(url);
+                return true;
+            } catch (e) {
+                return false;
+            }
+        }
+        
+        // Function to get server URL
+        function getServerUrl() {
+            const url = serverUrlInput.value.trim();
+            if (!url) {
+                statusDiv.textContent = 'Server URL is required';
+                return null;
+            }
+            
+            if (!isValidUrl(url)) {
+                statusDiv.textContent = 'Please enter a valid URL';
+                return null;
+            }
+            
+            // Remove trailing slash if present
+            return url.endsWith('/') ? url.slice(0, -1) : url;
+        }
+        
+        // Function to log debug information
+        function logDebug(message, data = null) {
+            const now = new Date().toLocaleTimeString();
+            let logEntry = document.createElement('div');
+            logEntry.innerHTML = `<strong>[${now}]</strong> ${message}`;
+            
+            if (data) {
+                let dataString;
+                try {
+                    dataString = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+                    const pre = document.createElement('pre');
+                    pre.textContent = dataString;
+                    pre.style.margin = '5px 0';
+                    pre.style.padding = '5px';
+                    pre.style.backgroundColor = '#f9f9f9';
+                    pre.style.overflowX = 'auto';
+                    logEntry.appendChild(pre);
+                } catch (e) {
+                    const err = document.createElement('div');
+                    err.textContent = '[Error converting data to string]';
+                    err.style.color = 'red';
+                    logEntry.appendChild(err);
+                }
+            }
+            
+            debugBox.insertBefore(logEntry, debugBox.firstChild);
+            console.log(message, data);
+        }
+        
+        // Function to handle API errors
+        function handleApiError(error, response = null) {
+            console.error('API Error:', error);
+            spinner.style.display = 'none';
+            statusDiv.textContent = `Error: ${error.message || 'Unknown error'}`;
+            logDebug(`Error: ${error.message || 'Unknown error'}`, response);
+        }
+        
+        // Function to authenticate with GpsGate
+        async function login() {
+            spinner.style.display = 'inline-block';
+            
+            // Check if using direct token
+            if (authTokenRadio.checked) {
+                authToken = apiTokenInput.value.trim();
+                applicationId = applicationIdInput.value.trim();
+                trackInfoId = trackInfoIdInput.value.trim();
+                
+                statusDiv.textContent = 'Setting token...';
+                logDebug('Setting API token', { 
+                    token: authToken,
+                    applicationId: applicationId,
+                    trackInfoId: trackInfoId
+                });
+                
+                if (!authToken) {
+                    statusDiv.textContent = 'API Token is required';
+                    spinner.style.display = 'none';
+                    return;
+                }
+                
+                if (!applicationId) {
+                    statusDiv.textContent = 'Application ID is required';
+                    spinner.style.display = 'none';
+                    return;
+                }
+                
+                // Enable buttons
+                loadTrackBtn.disabled = false;
+                loadUsersBtn.disabled = false;
+                loadAllTracksBtn.disabled = false;
+                statusDiv.textContent = `Token set with Application ID: ${applicationId}, TrackInfo ID: ${trackInfoId}`;
+                spinner.style.display = 'none';
+                
+                // Show sample curl commands for reference
+                logDebug('Equivalent curl command for tracks:', 
+                    `curl -X GET "${serverUrlInput.value}/api/v.1/applications/${applicationId}/trackinfos/${trackInfoId}/tracks?Filtered=true" -H "accept: application/json" -H "Authorization: ${authToken}"`
+                );
+                
+                logDebug('Equivalent curl command for users:', 
+                    `curl -X GET "${serverUrlInput.value}/api/v.1/applications/${applicationId}/users?FromIndex=0&PageSize=10" -H "accept: application/json" -H "Authorization: ${authToken}"`
+                );
+                
+                logDebug('Equivalent curl command for all tracks:', 
+                    `curl -X GET "${serverUrlInput.value}/api/v.1/applications/${applicationId}/trackinfos?UpdatedSince=${encodeURIComponent(new Date(updatedSinceInput.value).toISOString())}&FromIndex=0&PageSize=1000" -H "accept: application/json" -H "Authorization: ${authToken}"`
+                );
+                
+                return;
+            }
+            
+            const serverUrl = getServerUrl();
+            if (!serverUrl) {
+                spinner.style.display = 'none';
+                return;
+            }
+            
+            const username = usernameInput.value;
+            const password = passwordInput.value;
+            const application = applicationInput.value;
+            
+            statusDiv.textContent = 'Authenticating...';
+            
+            if (!username || !password) {
+                statusDiv.textContent = 'Username and password are required';
+                spinner.style.display = 'none';
+                return;
+            }
+            
+            try {
+                // Step 1: Get token
+                logDebug('Requesting token', {
+                    url: `${serverUrl}/api/v.1/token`,
+                    body: {
+                        username: username,
+                        password: password,
+                        application: application
+                    }
+                });
+                
+                const tokenResponse = await fetch(`${serverUrl}/api/v.1/token`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        username: username,
+                        password: password,
+                        application: application
+                    })
+                });
+                
+                if (!tokenResponse.ok) {
+                    const errorText = await tokenResponse.text();
+                    logDebug('Token request failed', {
+                        status: tokenResponse.status,
+                        statusText: tokenResponse.statusText,
+                        response: errorText
+                    });
+                    throw new Error(`Authentication failed: ${tokenResponse.status} ${tokenResponse.statusText}`);
+                }
+                
+                const tokenData = await tokenResponse.json();
+                logDebug('Token received', tokenData);
+                
+                // Check if the token was received
+                if (!tokenData || !tokenData.token) {
+                    throw new Error('Invalid token response');
+                }
+                
+                authToken = tokenData.token;
+                applicationId = tokenData.applicationId;
+                
+                // Default trackInfoId
+                trackInfoId = '1';
+                
+                // Enable buttons
+                loadTrackBtn.disabled = false;
+                loadUsersBtn.disabled = false;
+                loadAllTracksBtn.disabled = false;
+                statusDiv.textContent = `Logged in as ${username}. Application ID: ${applicationId}, using TrackInfo ID: ${trackInfoId}`;
+                
+                // Populate the token fields for reference
+                apiTokenInput.value = authToken;
+                applicationIdInput.value = applicationId;
+                trackInfoIdInput.value = trackInfoId;
+                
+            } catch (error) {
+                handleApiError(error);
+            } finally {
+                spinner.style.display = 'none';
+            }
+        }
+        
+        // Function to load track data
+        async function loadTrackData() {
+            spinner.style.display = 'inline-block';
+            statusDiv.textContent = 'Loading track data...';
+            trackStatsDiv.textContent = '';
+            
+            const serverUrl = getServerUrl();
+            if (!serverUrl) {
+                spinner.style.display = 'none';
+                return;
+            }
+            
+            // Get the current trackInfoId from the input
+            trackInfoId = trackInfoIdInput.value.trim();
+            
+            try {
+                // Get tracks for the specified time period
+                const trackEndpoint = `${serverUrl}/api/v.1/applications/${applicationId}/trackinfos/${trackInfoId}/tracks`;
+                
+                const queryParams = new URLSearchParams({
+                    Filtered: 'true'
+                });
+                
+                // Add date filters if specified
+                if (startTimeInput.value) {
+                    queryParams.append('from', new Date(startTimeInput.value).toISOString());
+                }
+                
+                if (endTimeInput.value) {
+                    queryParams.append('to', new Date(endTimeInput.value).toISOString());
+                }
+                
+                const requestUrl = `${trackEndpoint}?${queryParams.toString()}`;
+                
+                logDebug('Requesting track data', {
+                    url: requestUrl,
+                    token: authToken,
+                    timeRange: {
+                        from: startTimeInput.value ? new Date(startTimeInput.value).toISOString() : null,
+                        to: endTimeInput.value ? new Date(endTimeInput.value).toISOString() : null
+                    }
+                });
+                
+                const tracksResponse = await fetch(requestUrl, {
+                    headers: {
+                        'Accept': 'application/json',
+                        'Authorization': authToken 
+                    }
+                });
+                
+                if (!tracksResponse.ok) {
+                    const errorText = await tracksResponse.text();
+                    logDebug('Track request failed', {
+                        status: tracksResponse.status,
+                        statusText: tracksResponse.statusText,
+                        response: errorText
+                    });
+                    throw new Error(`Failed to get tracks: ${tracksResponse.status} ${tracksResponse.statusText}`);
+                }
+                
+                const trackPoints = await tracksResponse.json();
+                logDebug(`Received ${trackPoints.length} track points`, trackPoints.slice(0, 3));
+                
+                if (!trackPoints || trackPoints.length === 0) {
+                    statusDiv.textContent = 'No track points found for the selected time period';
+                    spinner.style.display = 'none';
+                    return;
+                }
+                
+                // Store track data for possible later reference
+                trackData[trackInfoId] = {
+                    points: trackPoints,
+                    stats: calculateTrackStats(trackPoints)
+                };
+                
+                // Display the track on the map
+                displayTrack(trackPoints);
+                
+                // Display track statistics
+                displayTrackStats(trackData[trackInfoId].stats);
+                
+                statusDiv.textContent = `Displaying track with ${trackPoints.length} points`;
+                
+                // Update track info in the tracks table if exists
+                updateTrackInfoTable(trackInfoId, trackData[trackInfoId].stats);
+                
+                // Switch to track tab
+                tabTrack.click();
+                
+            } catch (error) {
+                handleApiError(error);
+            } finally {
+                spinner.style.display = 'none';
+            }
+        }
+        
+        // Function to calculate track statistics
+        function calculateTrackStats(trackPoints) {
+            if (!trackPoints || trackPoints.length === 0) {
+                return {
+                    distance: 0,
+                    duration: 0,
+                    averageSpeed: 0,
+                    maxSpeed: 0,
+                    startTime: null,
+                    endTime: null
+                };
+            }
+            
+            // Sort points by UTC time
+            trackPoints.sort((a, b) => new Date(a.utc) - new Date(b.utc));
+            
+            let totalDistance = 0;
+            let maxSpeed = 0;
+            let speedSum = 0;
+            let speedPoints = 0;
+            
+            // Calculate total distance
+            for (let i = 1; i < trackPoints.length; i++) {
+                const prevPoint = trackPoints[i-1];
+                const currentPoint = trackPoints[i];
+                
+                const dist = calculateDistance(
+                    prevPoint.position.latitude, prevPoint.position.longitude,
+                    currentPoint.position.latitude, currentPoint.position.longitude
+                );
+                
+                totalDistance += dist;
+                
+                // Calculate max and average speed
+                if (currentPoint.velocity && currentPoint.velocity.groundSpeed > 0) {
+                    maxSpeed = Math.max(maxSpeed, currentPoint.velocity.groundSpeed);
+                    speedSum += currentPoint.velocity.groundSpeed;
+                    speedPoints++;
+                }
+            }
+            
+            const startTime = new Date(trackPoints[0].utc);
+            const endTime = new Date(trackPoints[trackPoints.length-1].utc);
+            const duration = endTime - startTime;
+            
+            const averageSpeed = speedPoints > 0 ? speedSum / speedPoints : 0;
+            
+            return {
+                distance: totalDistance,
+                duration: duration,
+                averageSpeed: averageSpeed,
+                maxSpeed: maxSpeed,
+                startTime: startTime,
+                endTime: endTime
+            };
+        }
+        
+        // Function to display track statistics
+        function displayTrackStats(stats) {
+            if (!stats) return;
+            
+            let statsHtml = '<strong>Track Statistics:</strong> ';
+            statsHtml += `Distance: ${formatDistance(stats.distance)} | `;
+            statsHtml += `Duration: ${formatDuration(stats.duration)} | `;
+            statsHtml += `Avg Speed: ${stats.averageSpeed.toFixed(1)} km/h | `;
+            statsHtml += `Max Speed: ${stats.maxSpeed.toFixed(1)} km/h`;
+            
+            trackStatsDiv.innerHTML = statsHtml;
+        }
+        
+        // Function to update track info in the tracks table
+        function updateTrackInfoTable(trackId, stats) {
+            const trackRow = document.querySelector(`tr[data-track-id="${trackId}"]`);
+            if (trackRow) {
+                const detailsCell = trackRow.querySelector('.track-details');
+                if (detailsCell && stats) {
+                    detailsCell.innerHTML = `Distance: ${formatDistance(stats.distance)}<br>Duration: ${formatDuration(stats.duration)}`;
+                }
+            }
+        }
+        
+        // Function to load track info list
+        async function loadAllTracks() {
+            spinner.style.display = 'inline-block';
+            statusDiv.textContent = 'Loading all tracks...';
+            
+            const serverUrl = getServerUrl();
+            if (!serverUrl) {
+                spinner.style.display = 'none';
+                return;
+            }
+            
+            try {
+                // Get all trackinfos
+                const updatedSince = new Date(updatedSinceInput.value || twoMonthsAgo);
+                const isoDate = updatedSince.toISOString();
+                
+                const tracksEndpoint = `${serverUrl}/api/v.1/applications/${applicationId}/trackinfos`;
+                
+                const queryParams = new URLSearchParams({
+                    UpdatedSince: isoDate,
+                    FromIndex: 0,
+                    PageSize: 1000
+                });
+                
+                const requestUrl = `${tracksEndpoint}?${queryParams.toString()}`;
+                
+                logDebug('Requesting all tracks', {
+                    url: requestUrl,
+                    token: authToken,
+                    updatedSince: isoDate
+                });
+                
+                const tracksResponse = await fetch(requestUrl, {
+                    headers: {
+                        'Accept': 'application/json',
+                        'Authorization': authToken 
+                    }
+                });
+                
+                if (!tracksResponse.ok) {
+                    const errorText = await tracksResponse.text();
+                    logDebug('All tracks request failed', {
+                        status: tracksResponse.status,
+                        statusText: tracksResponse.statusText,
+                        response: errorText
+                    });
+                    throw new Error(`Failed to get tracks: ${tracksResponse.status} ${tracksResponse.statusText}`);
+                }
+                
+                const tracks = await tracksResponse.json();
+                logDebug(`Received ${tracks.length} tracks`, tracks);
+                
+                if (!tracks || tracks.length === 0) {
+                    statusDiv.textContent = 'No tracks found since the selected date';
+                    spinner.style.display = 'none';
+                    return;
+                }
+                
+                // Display the tracks in the table
+                displayAllTracks(tracks);
+                statusDiv.textContent = `Displaying ${tracks.length} tracks`;
+                
+                // Switch to tracks tab
+                tabTracks.click();
+                
+            } catch (error) {
+                handleApiError(error);
+            } finally {
+                spinner.style.display = 'none';
+            }
+        }
+        
+        // Function to display all tracks in the table
+        function displayAllTracks(tracks) {
+            // Clear existing rows
+            tracksTbody.innerHTML = '';
+            
+            // First, sort tracks by most recent update date
+            tracks.sort((a, b) => {
+                const dateA = new Date(a.endUtc || a.lastUpdate || a.startUtc || 0);
+                const dateB = new Date(b.endUtc || b.lastUpdate || b.startUtc || 0);
+                return dateB - dateA;
+            });
+            
+            // Add track rows
+            tracks.forEach(track => {
+                const row = document.createElement('tr');
+                row.dataset.trackId = track.id;
+                
+                // ID cell
+                const idCell = document.createElement('td');
+                idCell.textContent = track.id || '-';
+                row.appendChild(idCell);
+                
+                // Date recorded cell - use UTC timestamp
+                const dateCell = document.createElement('td');
+                // Try to find a valid date in order of preference
+                const dateToShow = track.startUtc || track.endUtc || track.lastUpdate;
+                
+                if (dateToShow) {
+                    try {
+                        const date = new Date(dateToShow);
+                        // Manual date formatting to ensure it works correctly
+                        const year = date.getFullYear();
+                        const month = String(date.getMonth() + 1).padStart(2, '0');
+                        const day = String(date.getDate()).padStart(2, '0');
+                        const hours = String(date.getHours()).padStart(2, '0');
+                        const minutes = String(date.getMinutes()).padStart(2, '0');
+                        
+                        dateCell.textContent = `${year}-${month}-${day} ${hours}:${minutes}`;
+                    } catch (e) {
+                        dateCell.textContent = "Date error";
+                        console.error("Date parse error:", e, dateToShow);
+                    }
+                } else {
+                    dateCell.textContent = "No date available";
+                }
+                
+                row.appendChild(dateCell);
+                
+                // Track details cell
+                const detailsCell = document.createElement('td');
+                detailsCell.className = 'track-details';
+                
+                // Check if we already have stats for this track
+                if (trackData[track.id] && trackData[track.id].stats) {
+                    detailsCell.innerHTML = `Distance: ${formatDistance(trackData[track.id].stats.distance)}<br>` +
+                                            `Duration: ${formatDuration(trackData[track.id].stats.duration)}`;
+                } else {
+                    detailsCell.innerHTML = 'Stats will appear after viewing the track';
+                }
+                
+                row.appendChild(detailsCell);
+                
+                // Actions cell
+                const actionsCell = document.createElement('td');
+                const viewBtn = document.createElement('button');
+                viewBtn.textContent = 'View Track';
+                viewBtn.className = 'view-btn';
+                
+                viewBtn.addEventListener('click', () => {
+                    // Fill in the trackinfo ID 
+                    trackInfoIdInput.value = track.id;
+                    
+                    // Try to set sensible date range
+                    let startDate, endDate;
+                    
+                    if (track.startUtc) {
+                        startDate = new Date(track.startUtc);
+                        // Go back 1 hour
+                        startDate.setHours(startDate.getHours() - 1);
+                    } else {
+                        // Default to 24 hours before current time
+                        startDate = new Date();
+                        startDate.setHours(startDate.getHours() - 24);
+                    }
+                    
+                    if (track.endUtc) {
+                        endDate = new Date(track.endUtc);
+                        // Add 1 hour
+                        endDate.setHours(endDate.getHours() + 1);
+                    } else {
+                        // Default to current time
+                        endDate = new Date();
+                    }
+                    
+                    startTimeInput.value = formatDateForInput(startDate);
+                    endTimeInput.value = formatDateForInput(endDate);
+                    
+                    // Load the track
+                    loadTrackData();
+                });
+                
+                actionsCell.appendChild(viewBtn);
+                row.appendChild(actionsCell);
+                
+                tracksTbody.appendChild(row);
+            });
+        }
+        
+        // Function to load users data
+        async function loadUsersData() {
+            spinner.style.display = 'inline-block';
+            statusDiv.textContent = 'Loading users data...';
+            
+            const serverUrl = getServerUrl();
+            if (!serverUrl) {
+                spinner.style.display = 'none';
+                return;
+            }
+            
+            try {
+                // Get users using the endpoint format: applications/4/users?FromIndex=0&PageSize=10
+                const usersEndpoint = `${serverUrl}/api/v.1/applications/${applicationId}/users`;
+                
+                const queryParams = new URLSearchParams({
+                    FromIndex: 0,
+                    PageSize: 10
+                });
+                
+                const requestUrl = `${usersEndpoint}?${queryParams.toString()}`;
+                
+                logDebug('Requesting users data', {
+                    url: requestUrl,
+                    token: authToken
+                });
+                
+                const usersResponse = await fetch(requestUrl, {
+                    headers: {
+                        'Accept': 'application/json',
+                        'Authorization': authToken 
+                    }
+                });
+                
+                if (!usersResponse.ok) {
+                    const errorText = await usersResponse.text();
+                    logDebug('Users request failed', {
+                        status: usersResponse.status,
+                        statusText: usersResponse.statusText,
+                        response: errorText
+                    });
+                    throw new Error(`Failed to get users: ${usersResponse.status} ${usersResponse.statusText}`);
+                }
+                
+                const users = await usersResponse.json();
+                logDebug(`Received ${users.length} users`, users);
+                
+                if (!users || users.length === 0) {
+                    statusDiv.textContent = 'No users found';
+                    spinner.style.display = 'none';
+                    return;
+                }
+                
+                // Display the users in the table
+                displayUsers(users);
+                statusDiv.textContent = `Displaying ${users.length} users`;
+                
+                // Show the users container
+                usersContainer.style.display = 'block';
+                
+                // Switch to users tab
+                tabUsers.click();
+                
+            } catch (error) {
+                handleApiError(error);
+            } finally {
+                spinner.style.display = 'none';
+            }
+        }
+        
+        // Function to display users in the table
+        function displayUsers(users) {
+            // Clear existing rows
+            usersTbody.innerHTML = '';
+            
+            // Add user rows
+            users.forEach(user => {
+                const row = document.createElement('tr');
+                
+                // ID cell - added first as requested
+                const idCell = document.createElement('td');
+                idCell.textContent = user.id || '-';
+                row.appendChild(idCell);
+                
+                // Name cell
+                const nameCell = document.createElement('td');
+                nameCell.textContent = user.name || '-';
+                row.appendChild(nameCell);
+                
+                // Username cell
+                const usernameCell = document.createElement('td');
+                usernameCell.textContent = user.username || '-';
+                row.appendChild(usernameCell);
+                
+                // Email cell
+                const emailCell = document.createElement('td');
+                emailCell.textContent = user.email || '-';
+                row.appendChild(emailCell);
+                
+                // Status cell
+                const statusCell = document.createElement('td');
+                statusCell.textContent = user.enabled ? 'Enabled' : 'Disabled';
+                statusCell.style.color = user.enabled ? 'green' : 'red';
+                row.appendChild(statusCell);
+                
+                usersTbody.appendChild(row);
+            });
+        }
+        
+        // Function to display track on the map
+        function displayTrack(trackPoints) {
+            // Clear previous tracks
+            map.eachLayer(layer => {
+                if (layer instanceof L.Polyline || layer instanceof L.Marker) {
+                    map.removeLayer(layer);
+                }
+            });
+            
+            if (trackPoints.length === 0) {
+                statusDiv.textContent = 'No track points found';
+                return;
+            }
+            
+            // Extract coordinates from track points based on the provided format
+            const coordinates = trackPoints.map(point => [point.position.latitude, point.position.longitude]);
+            
+            // Create a polyline for the track
+            const trackLine = L.polyline(coordinates, {
+                color: 'blue',
+                weight: 4,
+                opacity: 0.7
+            }).addTo(map);
+            
+            // Add markers for start and end points
+            const startPoint = coordinates[0];
+            const endPoint = coordinates[coordinates.length - 1];
+            
+            L.marker(startPoint, {
+                title: 'Start',
+                icon: L.divIcon({
+                    className: 'start-marker',
+                    html: '<div style="background-color: green; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white;"></div>'
+                })
+            }).addTo(map);
+            
+            L.marker(endPoint, {
+                title: 'End',
+                icon: L.divIcon({
+                    className: 'end-marker',
+                    html: '<div style="background-color: red; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white;"></div>'
+                })
+            }).addTo(map);
+            
+            // Add speed information to the points
+            trackPoints.forEach((point, index) => {
+                if (point.velocity && point.velocity.groundSpeed > 0) {
+                    const position = [point.position.latitude, point.position.longitude];
+                    const speed = Math.round(point.velocity.groundSpeed);
+                    const time = new Date(point.utc).toLocaleTimeString();
+                    
+                    L.marker(position, {
+                        title: `Speed: ${speed} km/h at ${time}`,
+                        icon: L.divIcon({
+                            className: 'speed-marker',
+                            html: `<div style="background-color: rgba(255,255,255,0.7); padding: 3px; border-radius: 3px; font-size: 10px;">${speed}</div>`
+                        })
+                    }).addTo(map);
+                }
+            });
+            
+            // Fit the map to the track bounds
+            map.fitBounds(trackLine.getBounds(), { padding: [30, 30] });
+        }
+        
+        // Event listeners
+        loginBtn.addEventListener('click', login);
+        loadTrackBtn.addEventListener('click', loadTrackData);
+        loadUsersBtn.addEventListener('click', loadUsersData);
+        loadAllTracksBtn.addEventListener('click', loadAllTracks);
+        refreshTracksBtn.addEventListener('click', loadAllTracks);
+    </script>
+</body>
+</html>
